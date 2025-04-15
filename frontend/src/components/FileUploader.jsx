@@ -270,7 +270,7 @@ const FileUploader = () => {
             const data = response.data;
             console.log(data);
             if (data.success) {
-                setStatus(`File uploaded successfully. Rows Written: ${data.result.written_rows} \n
+                setStatus(`Rows Written: ${data.result.written_rows} \n
                             Table Name ${data.tableName}`);
             } else {
                 setStatus('Error: File upload failed.');

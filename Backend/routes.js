@@ -1,39 +1,39 @@
 const express = require('express');
-const cors = require('cors'); // Import CORS library
-const { createClient } = require('@clickhouse/client');
-const jwt = require('jsonwebtoken'); // Import JWT library
+const cors = require('cors'); // Import CORS library to handle cross-origin requests
+const { createClient } = require('@clickhouse/client'); // Import ClickHouse client
+const jwt = require('jsonwebtoken'); // Import JWT library for token handling
 const router = express.Router();
 
-// Use CORS middleware
+// Use CORS middleware to allow cross-origin requests
 router.use(cors());
 
-// POST /upload-file endpoint
+// POST /upload-file endpoint to handle file uploads and data ingestion
 router.post('/upload-file', async (req, res) => {
     try {
-        const { jsonData, tableName } = req.body;
-        const token = req.headers.authorization?.split(' ')[1];
+        const { jsonData, tableName } = req.body; // Extract JSON data and table name from request body
+        const token = req.headers.authorization?.split(' ')[1]; // Extract JWT token from headers
         const updatedData = jsonData.map(entry => {
             const newEntry = {};
             for (const key in entry) {
-                const newKey = key.replace(/ /g, "_");
+                const newKey = key.replace(/ /g, "_"); // Replace spaces in keys with underscores
                 newEntry[newKey] = entry[key];
             }
             return newEntry;
         });
 
         if (!token) {
-            return res.status(401).send('Unauthorized: Missing token');
+            return res.status(401).send('Unauthorized: Missing token'); // Handle missing token
         }
 
         if (!jsonData || !Array.isArray(jsonData) || jsonData.length === 0) {
-            return res.status(400).send('Invalid or empty data provided.');
+            return res.status(400).send('Invalid or empty data provided.'); // Handle invalid data
         }
 
-        // Decode JWT
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
+        // Decode JWT to retrieve connection details
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key'); // Use environment variable for JWT secret
         const { host, database, username, password } = decoded;
 
-        // ClickHouse Client
+        // Initialize ClickHouse client with connection details
         const clickhouse = createClient({
             url: host,
             username: username,
@@ -41,15 +41,15 @@ router.post('/upload-file', async (req, res) => {
             database: database,
         });
 
-        // Check if table exists
+        // Check if the table exists
         const tableExistsQuery = `EXISTS TABLE ${tableName}`;
         const tableExistsResponse = await clickhouse.query({ query: tableExistsQuery });
         const tableExists = (await tableExistsResponse.json()).data[0]?.result === 1;
 
-        // Create table if not exists
+        // Create table if it does not exist
         if (!tableExists) {
             const columnsDef = Object.keys(updatedData[0])
-                .map((key) => `${key} String`) // Assuming all columns are of type String
+                .map((key) => `${key} String`) // Define all columns as String type
                 .join(', ');
 
             const createTableQuery = `
@@ -57,21 +57,19 @@ router.post('/upload-file', async (req, res) => {
                     ${columnsDef}
                 ) ENGINE = MergeTree() ORDER BY tuple();
             `;
-           const createResult =  await clickhouse.query({ query: createTableQuery });
-           
-           console.log(createResult)
+            const createResult = await clickhouse.query({ query: createTableQuery });
+            console.log(createResult);
         }
 
-        // Insert using JSONEachRow format (safer and cleaner)
+        // Insert data into the table using JSONEachRow format
         const InsertResult = await clickhouse.insert({
             table: tableName,
             values: updatedData,
             format: 'JSONEachRow',
         });
-        console.log(InsertResult.summary)
+        console.log(InsertResult.summary);
 
-        res.status(200).json({ success: true, result: InsertResult.summary , tableName:tableName});
-
+        res.status(200).json({ success: true, result: InsertResult.summary, tableName: tableName });
     } catch (error) {
         console.log("Catch err");
         console.error('Error ingesting data:', error);
@@ -82,13 +80,13 @@ router.post('/upload-file', async (req, res) => {
     }
 });
 
-// POST /connect endpoint
+// POST /connect endpoint to establish a connection with ClickHouse
 router.post('/connect', async (req, res) => {
     try {
-        const { host, database, username, password } = req.body;
+        const { host, database, username, password } = req.body; // Extract connection details
 
         if (!host || !database || !username || !password) {
-            return res.status(400).send('Missing required connection details.');
+            return res.status(400).send('Missing required connection details.'); // Handle missing details
         }
 
         const token = req.headers.authorization?.split(' ')[1];
@@ -108,6 +106,7 @@ router.post('/connect', async (req, res) => {
             }
         }
 
+        // Initialize ClickHouse client
         const clickhouse = createClient({
             url: host,
             username: username,
@@ -115,15 +114,16 @@ router.post('/connect', async (req, res) => {
             database: database,
         });
 
-        await clickhouse.ping();
+        await clickhouse.ping(); // Test connection
 
-        const response = await clickhouse.query({ query: `SHOW TABLES` });
+        const response = await clickhouse.query({ query: `SHOW TABLES` }); // Fetch tables
         const tables = (await response.json()).data.map((table) => table.name || table);
 
+        // Generate a new JWT token
         const newToken = jwt.sign(
             { host, database, username, password },
-            process.env.JWT_SECRET || 'your_secret_key',
-            { expiresIn: '60m' } // Set session expiration to 5 minutes
+            process.env.JWT_SECRET || 'your_secret_key', // Use environment variable for JWT secret
+            { expiresIn: '60m' } // Set session expiration to 60 minutes
         );
 
         res.status(200).json({
@@ -131,7 +131,7 @@ router.post('/connect', async (req, res) => {
             token: newToken,
             tables,
             success: true,
-            expiresAt: Date.now() + 5 * 60 * 1000,
+            expiresAt: Date.now() + 60 * 60 * 1000,
         });
     } catch (error) {
         console.error('Connection error:', error);
@@ -139,21 +139,21 @@ router.post('/connect', async (req, res) => {
     }
 });
 
-// POST /get-columns endpoint
+// POST /get-columns endpoint to fetch column names for a table
 router.post('/get-columns', async (req, res) => {
     try {
-        const { tableName } = req.body;
-        const token = req.headers.authorization?.split(' ')[1];
+        const { tableName } = req.body; // Extract table name from request body
+        const token = req.headers.authorization?.split(' ')[1]; // Extract JWT token
 
         if (!token) {
-            return res.status(401).send('Unauthorized: Missing token');
+            return res.status(401).send('Unauthorized: Missing token'); // Handle missing token
         }
 
-        // Decode the JWT token to retrieve connection details
+        // Decode JWT to retrieve connection details
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
         const { host, database, username, password } = decoded;
 
-        // Create a new ClickHouse client with decoded details
+        // Initialize ClickHouse client
         const clickhouse = createClient({
             url: host,
             username: username,
@@ -174,21 +174,21 @@ router.post('/get-columns', async (req, res) => {
     }
 });
 
-// POST /get-table-data endpoint
+// POST /get-table-data endpoint to fetch data from a table
 router.post('/get-table-data', async (req, res) => {
     try {
-        const { tableName } = req.body;
-        const token = req.headers.authorization?.split(' ')[1];
+        const { tableName } = req.body; // Extract table name from request body
+        const token = req.headers.authorization?.split(' ')[1]; // Extract JWT token
 
         if (!token) {
-            return res.status(401).send('Unauthorized: Missing token');
+            return res.status(401).send('Unauthorized: Missing token'); // Handle missing token
         }
 
-        // Decode the JWT token to retrieve connection details
+        // Decode JWT to retrieve connection details
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
         const { host, database, username, password } = decoded;
 
-        // Create a new ClickHouse client with decoded details
+        // Initialize ClickHouse client
         const clickhouse = createClient({
             url: host,
             username: username,
@@ -198,7 +198,7 @@ router.post('/get-table-data', async (req, res) => {
 
         // Fetch data from the specified table
         const response = await clickhouse.query({
-            query: `SELECT * FROM ${tableName} LIMIT 100`, 
+            query: `SELECT * FROM ${tableName} LIMIT 100`, // Limit to 100 rows
         });
         const data = await response.json();
 
@@ -209,20 +209,20 @@ router.post('/get-table-data', async (req, res) => {
     }
 });
 
-// POST /get-tables endpoint
+// POST /get-tables endpoint to fetch all tables in the database
 router.post('/get-tables', async (req, res) => {
     try {
-        const token = req.headers.authorization?.split(' ')[1];
+        const token = req.headers.authorization?.split(' ')[1]; // Extract JWT token
 
         if (!token) {
-            return res.status(401).send('Unauthorized: Missing token');
+            return res.status(401).send('Unauthorized: Missing token'); // Handle missing token
         }
 
-        // Decode the JWT token to retrieve connection details
+        // Decode JWT to retrieve connection details
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
         const { host, database, username, password } = decoded;
 
-        // Create a new ClickHouse client with decoded details
+        // Initialize ClickHouse client
         const clickhouse = createClient({
             url: host,
             username: username,
@@ -243,4 +243,4 @@ router.post('/get-tables', async (req, res) => {
     }
 });
 
-module.exports = router;
+module.exports = router; // Export the router
