@@ -16,11 +16,11 @@ Zeotap is a project designed to manage and process data efficiently. This reposi
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone <https://github.com/Palash1256/Data-Ingestion-Tool>
+   git clone https://github.com/Palash1256/Data-Ingestion-Tool
    ```
 2. Navigate to the project directory:
    ```bash
-   cd Zeotap
+   cd Data-Ingestion-Tool
    ```
 3. Install dependencies:
    ```bash
