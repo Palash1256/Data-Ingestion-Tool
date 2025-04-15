@@ -1,7 +1,7 @@
 # Zeotap Project
 
 ## Overview
-Zeotap2 is a project designed to manage and process data efficiently. This repository contains the source code and configuration files required for the project.
+Zeotap is a project designed to manage and process data efficiently. This repository contains the source code and configuration files required for the project.
 
 ## Directory Structure
 - `src/` - Contains the source code.
@@ -16,11 +16,11 @@ Zeotap2 is a project designed to manage and process data efficiently. This repos
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone <https://github.com/Palash1256/Data-Ingestion-Tool>
    ```
 2. Navigate to the project directory:
    ```bash
-   cd Zeotap2
+   cd Zeotap
    ```
 3. Install dependencies:
    ```bash
